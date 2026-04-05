@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPhone</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #181b2f;
+      --ink: #eef2ff;
+      --muted: #97a0c4;
+      --accent: #4f7cff;
+      --ok: #34c759;
+      --danger: #ff453a;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body { margin: 0; background: radial-gradient(circle at top, #1f2550, #0b0e1e 60%); color: var(--ink); }
+    .phone { width: 100%; height: 100vh; padding: 14px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; }
+    .title { text-align: center; font-weight: 700; }
+    .contact { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+    input, button { border: 0; border-radius: 10px; padding: 10px; }
+    input { background: #0c1023; color: var(--ink); }
+    button { cursor: pointer; background: var(--accent); color: white; font-weight: 600; }
+    button.danger { background: var(--danger); }
+    button.ok { background: var(--ok); }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tab { background: var(--panel); color: var(--muted); }
+    .tab.active { color: white; border: 1px solid var(--accent); }
+    .panel { background: rgba(24,27,47,.85); border-radius: 12px; padding: 10px; overflow: auto; }
+    .row { margin: 8px 0; padding: 8px; border-radius: 10px; background: #0f1430; }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .bubble { white-space: pre-wrap; word-break: break-word; }
+    .photo { width: 100%; border-radius: 10px; margin-top: 4px; }
+    .composer { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+    .status { font-size: 12px; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+<div class="phone">
+  <div class="title">GPhone iOS-style</div>
+
+  <div class="contact">
+    <input id="to" placeholder="SteamID64 destinataire" />
+    <button id="callBtn">Appeler</button>
+    <button id="hangBtn" class="danger">Raccrocher</button>
+  </div>
+
+  <div class="tabs">
+    <button id="tabMsg" class="tab active">Messages</button>
+    <button id="tabPhoto" class="tab">Photo</button>
+  </div>
+
+  <div class="panel" id="messagesPanel"></div>
+
+  <div id="composerMsg" class="composer">
+    <input id="msg" placeholder="Ton message" />
+    <button id="sendBtn">Envoyer</button>
+    <button id="photoBtn" class="ok">Prendre photo</button>
+  </div>
+
+  <div id="composerPhoto" class="composer" style="display:none;">
+    <input id="quality" type="number" min="15" max="80" value="35" />
+    <button id="captureBtn" class="ok">Capturer</button>
+    <button id="backBtn">Retour</button>
+  </div>
+
+  <div class="status" id="status">Prêt.</div>
+</div>
+
+<script>
+(function () {
+  const state = {
+    currentTab: 'msg',
+    timeline: []
+  };
+
+  const el = {
+    to: document.getElementById('to'),
+    msg: document.getElementById('msg'),
+    quality: document.getElementById('quality'),
+    messagesPanel: document.getElementById('messagesPanel'),
+    status: document.getElementById('status'),
+    tabMsg: document.getElementById('tabMsg'),
+    tabPhoto: document.getElementById('tabPhoto'),
+    composerMsg: document.getElementById('composerMsg'),
+    composerPhoto: document.getElementById('composerPhoto')
+  };
+
+  function setStatus(text) {
+    el.status.textContent = text;
+  }
+
+  function send(action) {
+    if (!window.gmod || typeof window.gmod.sendAction !== 'function') {
+      console.warn('Pont gmod indisponible', action);
+      return;
+    }
+    window.gmod.sendAction(JSON.stringify(action));
+  }
+
+  function addMessage(entry) {
+    state.timeline.push(entry);
+    renderTimeline();
+  }
+
+  function renderTimeline() {
+    el.messagesPanel.innerHTML = '';
+    for (const row of state.timeline.slice(-80)) {
+      const item = document.createElement('div');
+      item.className = 'row';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `${row.type.toUpperCase()} • ${row.from}`;
+      item.appendChild(meta);
+
+      if (row.text) {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = row.text;
+        item.appendChild(bubble);
+      }
+
+      if (row.photo) {
+        const img = document.createElement('img');
+        img.className = 'photo';
+        img.src = row.photo;
+        item.appendChild(img);
+      }
+
+      el.messagesPanel.appendChild(item);
+    }
+    el.messagesPanel.scrollTop = el.messagesPanel.scrollHeight;
+  }
+
+  function switchTab(tab) {
+    state.currentTab = tab;
+    const isMsg = tab === 'msg';
+    el.tabMsg.classList.toggle('active', isMsg);
+    el.tabPhoto.classList.toggle('active', !isMsg);
+    el.composerMsg.style.display = isMsg ? 'grid' : 'none';
+    el.composerPhoto.style.display = isMsg ? 'none' : 'grid';
+  }
+
+  document.getElementById('sendBtn').addEventListener('click', () => {
+    const to = el.to.value.trim();
+    const text = el.msg.value.trim();
+    if (!to || !text) {
+      setStatus('Destinataire + message requis.');
+      return;
+    }
+    send({ action: 'send_text', to, text });
+    addMessage({ type: 'text', from: 'Moi', text });
+    el.msg.value = '';
+    setStatus('Message envoyé.');
+  });
+
+  document.getElementById('photoBtn').addEventListener('click', () => switchTab('photo'));
+  document.getElementById('backBtn').addEventListener('click', () => switchTab('msg'));
+  document.getElementById('tabMsg').addEventListener('click', () => switchTab('msg'));
+  document.getElementById('tabPhoto').addEventListener('click', () => switchTab('photo'));
+
+  document.getElementById('captureBtn').addEventListener('click', () => {
+    const to = el.to.value.trim();
+    const quality = Number(el.quality.value || 35);
+    if (!to) {
+      setStatus('Destinataire requis pour la photo.');
+      return;
+    }
+    send({ action: 'send_photo', to, quality });
+    setStatus('Capture photo envoyée.');
+    switchTab('msg');
+  });
+
+  document.getElementById('callBtn').addEventListener('click', () => {
+    const to = el.to.value.trim();
+    if (!to) {
+      setStatus('Destinataire requis pour appeler.');
+      return;
+    }
+    send({ action: 'call', to });
+    setStatus('Appel en cours...');
+  });
+
+  document.getElementById('hangBtn').addEventListener('click', () => {
+    const to = el.to.value.trim();
+    if (!to) {
+      setStatus('Destinataire requis pour raccrocher.');
+      return;
+    }
+    send({ action: 'call_response', to, response: 'hangup' });
+    setStatus('Raccroché.');
+  });
+
+  window.gphoneReceive = function (eventName, payload) {
+    if (eventName === 'incoming_message' || eventName === 'self_message') {
+      addMessage(payload || {});
+      setStatus('Nouveau message.');
+      return;
+    }
+
+    if (eventName === 'call_state') {
+      const s = payload?.state || 'unknown';
+      const peer = payload?.peer || '?';
+
+      if (s === 'incoming') {
+        setStatus(`Appel entrant de ${peer}`);
+        const accepted = window.confirm(`Appel entrant de ${peer}. Accepter ?`);
+        send({ action: 'call_response', to: peer, response: accepted ? 'accept' : 'decline' });
+      } else {
+        setStatus(`État appel: ${s} (${peer})`);
+      }
+      return;
+    }
+
+    if (eventName === 'toast') {
+      setStatus(payload?.message || 'Info');
+    }
+  };
+
+  switchTab('msg');
+  setStatus('Tape !phone dans le chat ou gphone_open dans la console.');
+})();
+</script>
+</body>
+</html>
